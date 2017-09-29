@@ -209,9 +209,9 @@ class LogStash::Inputs::OktaEnterprise < LogStash::Inputs::Base
       @auth_token = @auth_token_env
     end
 
-    unless (@auth_token.index(/[^A-Za-z0-9-]/).nil?)
+    unless (@auth_token.index(/[^A-Za-z0-9\-_~]/).nil?)
       raise LogStash::ConfigurationError, "The auth_token should be" +
-        "alpha-numeric characters only, please check the token to ensure it is correct."
+        "unreserved characters only, please check the token to ensure it is correct."
     end
 
     if (@start_date and @filter)
@@ -437,15 +437,26 @@ class LogStash::Inputs::OktaEnterprise < LogStash::Inputs::Base
         end
       end
 
-      @codec.decode(response.body) do |decoded|
-        event = @target ? LogStash::Event.new(@target => decoded.to_hash) : decoded
-        apply_metadata(event, requested_url, response, exec_time)
-        decorate(event)
-        queue << event
+      if (response.body.length > 0)
+        @codec.decode(response.body) do |decoded|
+          event = @target ? LogStash::Event.new(@target => decoded.to_hash) : decoded
+          apply_metadata(event, requested_url, response, exec_time)
+          decorate(event)
+          queue << event
+        end
+      else
+        @codec.decode("{}") do |decoded|
+          event = @target ? LogStash::Event.new(@target => decoded.to_hash) : decoded
+          apply_metadata(event, requested_url, response, exec_time)
+          decorate(event)
+          queue << event
+        end
       end
+        
 
       if (Array(response.headers["link"]).count > 1)
         @continue = true
+        @logger.debug("Continue status", :continue => @continue  )
       end
 
       @logger.info("Successful response returned", :code => response.code, :headers => response.headers)
@@ -455,9 +466,9 @@ class LogStash::Inputs::OktaEnterprise < LogStash::Inputs::Base
       @codec.decode(response.body) do |decoded|
         event = @target ? LogStash::Event.new(@target => decoded.to_hash) : decoded
         apply_metadata(event, requested_url, response, exec_time)
-        event["Okta-Plugin-Status"] = "Auth_token supplied is not valid, " +
-        "validate the auth_token and update the plugin config."
-        event["HTTP-Code"] = 401
+        event.set("Okta-Plugin-Status","Auth_token supplied is not valid, " +
+        "validate the auth_token and update the plugin config.")
+        event.set("HTTP-Code",401)
         event.tag("_okta_response_error")
         decorate(event)
         queue << event
@@ -473,8 +484,8 @@ class LogStash::Inputs::OktaEnterprise < LogStash::Inputs::Base
         @codec.decode(response.body) do |decoded|
           event = @target ? LogStash::Event.new(@target => decoded.to_hash) : decoded
           apply_metadata(event, requested_url, response, exec_time)
-          event["Okta-Plugin-Status"] = "Filter string was not valid."
-          event["HTTP-Code"] = 400
+          event.set("Okta-Plugin-Status","Filter string was not valid.")
+          event.set("HTTP-Code",400)
           event.tag("_okta_response_error")
           decorate(event)
           queue << event
@@ -494,8 +505,8 @@ class LogStash::Inputs::OktaEnterprise < LogStash::Inputs::Base
         @codec.decode(response.body) do |decoded|
           event = @target ? LogStash::Event.new(@target => decoded.to_hash) : decoded
           apply_metadata(event, requested_url, response, exec_time)
-          event["Okta-Plugin-Status"] = "Date was not formatted correctly."
-          event["HTTP-Code"] = 400
+          event.set("Okta-Plugin-Status","Date was not formatted correctly.")
+          event.set("HTTP-Code",400)
           event.tag("_okta_response_error")
           decorate(event)
           queue << event
@@ -526,8 +537,8 @@ class LogStash::Inputs::OktaEnterprise < LogStash::Inputs::Base
     @codec.decode(response.body) do |decoded|
       event = @target ? LogStash::Event.new(@target => decoded.to_hash) : decoded
       apply_metadata(event, requested_url, response, exec_time)
-      event["Okta-Plugin-Status"] = "Unknown error, see Okta error"
-      event["HTTP-Code"] = response.code
+      event.set("Okta-Plugin-Status","Unknown error, see Okta error")
+      event.set("HTTP-Code",response.code)
       event.tag("_okta_response_error")
       decorate(event)
       queue << event
@@ -548,11 +559,11 @@ class LogStash::Inputs::OktaEnterprise < LogStash::Inputs::Base
 
     event = LogStash::Event.new
     apply_metadata(event, requested_url, nil, exec_time)
-    event["http_request_failure"] = {
+    event.set("http_request_failure", {
       "Okta-Plugin-Status" => "Client Connection Error",
       "Connection-Error" => exception.message,
       "backtrace" => exception.backtrace
-      }
+      })
     event.tag("_http_request_failure")
     decorate(event)
     queue << event
@@ -563,6 +574,7 @@ class LogStash::Inputs::OktaEnterprise < LogStash::Inputs::Base
   def apply_metadata(event, requested_url, response=nil, exec_time=nil)
     return unless @metadata_target
 
+    m = {}
     m = {
       "host" => @host,
       "url" => requested_url,
@@ -576,7 +588,7 @@ class LogStash::Inputs::OktaEnterprise < LogStash::Inputs::Base
       m["retry_count"] = response.times_retried
     end
 
-    event[@metadata_target] = m
+    event.set(@metadata_target,m)
 
   end
 
