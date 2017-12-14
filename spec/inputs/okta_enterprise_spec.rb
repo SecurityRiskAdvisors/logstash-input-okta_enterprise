@@ -34,8 +34,10 @@ describe LogStash::Inputs::OktaEnterprise do
       end
     end
 
+    subject { klass.new(opts) }
+
     before(:each) do
-      subject = klass.new(opts)
+      subject
     end
 
     context "The start date is not in the correct format" do
@@ -210,7 +212,7 @@ describe LogStash::Inputs::OktaEnterprise do
     }
 
     shared_examples "unprocessable_requests" do
-      let(:poller) { LogStash::Inputs::OktaEnterprise.new(settings) }
+      let(:poller) { klass.new(settings) }
       subject(:event) {
         poller.send(:run_once, queue)
         queue.pop(true)
