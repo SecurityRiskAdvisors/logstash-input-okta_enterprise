@@ -88,6 +88,49 @@ describe LogStash::Inputs::OktaEnterprise do
         include_examples("configuration errors")
       end
     end
+    context "logger throttle management" do
+      let(:throttle_opts) {
+        throttle_opts = default_opts.merge({"log_throttle" => 100000}).clone
+        throttle_opts
+      }
+
+      context "a number too large is used" do
+        let(:opts) { 
+          throttle_opts["log_throttle"] = 2**63-1 
+          throttle_opts
+        }
+        include_examples("configuration errors")
+      end
+      context "when no throttle is set" do
+        let(:opts) { default_opts }
+        it "sets the logger function to open_log" do
+          subject.register
+          expect(subject.instance_variable_get("@noisy_log")).to eql(subject.method(:open_log))
+        end
+      end
+      context "when a throttle is set" do
+        let(:opts) { throttle_opts }
+        it "sets the logger function to throttled_log" do
+          subject.register
+          expect(subject.instance_variable_get("@noisy_log")).to eql(subject.method(:throttled_log))
+        end
+
+        context "when log level is debug" do
+          it "sets the logger function to open_log" do
+            allow(subject.instance_variable_get("@logger")).to receive(:debug?) { true }
+            subject.register
+            expect(subject.instance_variable_get("@noisy_log")).to eql(subject.method(:open_log))
+          end
+        end
+        context "when log level is trace" do
+          it "sets the logger function to open_log" do
+            allow(subject.instance_variable_get("@logger")).to receive(:trace?) { true }
+            subject.register
+            expect(subject.instance_variable_get("@noisy_log")).to eql(subject.method(:open_log))
+          end
+        end
+      end
+    end
   end
 
   describe "instances" do

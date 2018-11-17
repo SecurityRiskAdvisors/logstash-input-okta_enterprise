@@ -9,6 +9,7 @@ require "base64"
 require "cgi"
 
 MAX_AUTH_TOKEN_FILE_SIZE = 1 * 2**10
+FIXNUM_RESET_SIZE = 2**63 - 100000000000000000 # Size at which to reset the noise counter
 
 # This Logstash input plugin allows you to call an the Okta HTTP API to ship to other SIEMS.
 # This plugin is based on the http_poller plugin, however the plugin needed to retain a state.
@@ -150,7 +151,7 @@ class LogStash::Inputs::OktaEnterprise < LogStash::Inputs::Base
   # Format: File path
   config :auth_token_env, :validate => :string
 
-   # The base filename to store the pointer to the current location in the logs
+  # The base filename to store the pointer to the current location in the logs
   # This file will be renamed with each new reference to limit loss of this data
   # The location will need at least write and execute privs for the logstash user
   # This parameter is not required, however on start logstash will ship all logs to your SIEM.
@@ -167,6 +168,14 @@ class LogStash::Inputs::OktaEnterprise < LogStash::Inputs::Base
   # Define the target field for placing the received data.
   # If this setting is omitted, the data will be stored at the root (top level) of the event.
   config :target, :validate => :string
+
+  # The throttle value to use for noisy log lines (at the info level)
+  # Currently just one log statement (successful HTTP connects)
+  # The value is used to mod a counter, so set it appropriately for log levels
+  # NOTE: This value will be ignored when the log level is debug or trace
+  #
+  # Format: Integer
+  config :log_throttle, :validate => :number, :required => false
 
   public
   Schedule_types = %w(cron every at in)
@@ -231,6 +240,26 @@ class LogStash::Inputs::OktaEnterprise < LogStash::Inputs::Base
 
     if (@filter)
       @filter = CGI.escape(@filter)
+    end
+
+    @noisy_log = method(:open_log)
+    if (@log_throttle)
+      if (@log_throttle > FIXNUM_RESET_SIZE)
+        raise LogStash::ConfigurationError, "Config log_throttle must be" + 
+          "less than #{FIXNUM_RESET_SIZE}."
+      end
+      @noisy_log = method(:throttled_log)
+      @throttle_counter = 0
+    end
+    if (@logger.debug?)
+      @noisy_log = method(:open_log)
+    end
+    begin
+      if (@logger.trace?)
+        @noisy_log = method(:open_log)
+      end
+    rescue NoMethodError
+      # Do nothing b/c it doesn't really matter, it retains compatability with 2.4 vs higher
     end
 
     if (@state_file_base)
@@ -459,7 +488,7 @@ class LogStash::Inputs::OktaEnterprise < LogStash::Inputs::Base
         @logger.debug("Continue status", :continue => @continue  )
       end
 
-      @logger.info("Successful response returned", :code => response.code, :headers => response.headers)
+      @noisy_log.call("Successful response returned",:code => response.code, :headers => response.headers)
       @logger.debug("Response body", :body => response.body)
 
     when 401
@@ -590,6 +619,23 @@ class LogStash::Inputs::OktaEnterprise < LogStash::Inputs::Base
 
     event.set(@metadata_target,m)
 
+  end
+
+  private
+  def throttled_log(message, vars = {})
+    if (@throttle_counter < 3 or @throttle_counter % @log_throttle == 0 or @throttle_counter >= FIXNUM_RESET_SIZE)
+      @logger.info(message, vars)
+
+      if (@throttle_counter >= FIXNUM_RESET_SIZE)
+        @throttle_counter = 0
+      end
+    end
+    @throttle_counter += 1
+  end
+
+  private
+  def open_log(message, vars)
+    @logger.info(message, vars)
   end
 
   public
