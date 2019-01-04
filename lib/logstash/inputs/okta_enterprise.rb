@@ -177,9 +177,24 @@ class LogStash::Inputs::OktaEnterprise < LogStash::Inputs::Base
   # Format: Integer
   config :log_throttle, :validate => :number, :required => false
 
+  # Force a user to agree to the deprecation notice.# 
+  # Deprecation info can be found here: 
+  # https://github.com/SecurityRiskAdvisors/logstash-input-okta_enterprise/blob/master/docs/Migration.md
+  #
+  # Format: Boolean
+  config :accept_deprecation_notice, :validate => :boolean, :default => false
+
   public
   Schedule_types = %w(cron every at in)
   def register
+
+    unless (@accept_deprecation_notice)
+      msg = "The Okta Events API (and this plugin) have been deprecated. For more info: " +
+      "https://github.com/SecurityRiskAdvisors/logstash-input-okta_enterprise/blob/master/docs/Migration.md. " + 
+      "Instructions to proceed can be found there."
+      @logger.fatal(msg)
+      raise LogStash::ConfigurationError, msg
+    end
 
     if (@auth_token_env and @auth_token_file)
       raise LogStash::ConfigurationError, "auth_token_file and auth_token_env" +

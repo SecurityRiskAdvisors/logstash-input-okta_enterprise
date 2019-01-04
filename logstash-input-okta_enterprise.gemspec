@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name          = 'logstash-input-okta_enterprise'
-  s.version       = '0.6.0'
+  s.version       = '0.6.1'
   s.licenses      = ['Apache License (2.0)']
   s.summary       = 'This plugin fetches log events from Okta'
   s.description   = 'This plugin fetches log events from Okta'

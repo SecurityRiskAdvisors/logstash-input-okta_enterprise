@@ -1,3 +1,9 @@
+## Migration Notice
+
+This plugin in deprecated. For new implementations, please use [okta_system_log](https://github.com/SecurityRiskAdvisors/logstash-input-okta_system_log) instead.
+
+You can find more information in the [migration documentation](docs/Migration.md).
+
 # Logstash Plugin
 
 This is a plugin for [Logstash](https://github.com/elastic/logstash).
