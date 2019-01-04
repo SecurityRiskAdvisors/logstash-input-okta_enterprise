@@ -22,6 +22,7 @@ describe LogStash::Inputs::OktaEnterprise do
       "url" => default_url,
       "auth_token_env" => default_auth_token_env,
       "metadata_target" => metadata_target,
+      "accept_deprecation_notice" => true,
       "codec" => "json"
     }
   }
